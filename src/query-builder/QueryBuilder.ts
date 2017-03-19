@@ -1,20 +1,21 @@
-import {Alias} from "./alias/Alias";
-import {AliasMap} from "./alias/AliasMap";
-import {RawSqlResultsToEntityTransformer} from "./transformer/RawSqlResultsToEntityTransformer";
-import {EntityMetadata} from "../metadata/EntityMetadata";
-import {ObjectLiteral} from "../common/ObjectLiteral";
-import {QueryRunner} from "../query-runner/QueryRunner";
-import {SqlServerDriver} from "../driver/sqlserver/SqlServerDriver";
-import {OrderByCondition} from "../find-options/OrderByCondition";
-import {Connection} from "../connection/Connection";
-import {JoinOptions} from "./JoinOptions";
-import {QueryRunnerProvider} from "../query-runner/QueryRunnerProvider";
+import { Alias } from "./alias/Alias";
+import { AliasMap } from "./alias/AliasMap";
+import { RawSqlResultsToEntityTransformer } from "./transformer/RawSqlResultsToEntityTransformer";
+import { EntityMetadata } from "../metadata/EntityMetadata";
+import { ObjectLiteral } from "../common/ObjectLiteral";
+import { QueryRunner } from "../query-runner/QueryRunner";
+import { SqlServerDriver } from "../driver/sqlserver/SqlServerDriver";
+import { OrderByCondition } from "../find-options/OrderByCondition";
+import { Connection } from "../connection/Connection";
+import { JoinOptions } from "./JoinOptions";
+import { QueryRunnerProvider } from "../query-runner/QueryRunnerProvider";
+import { ColumnTypes } from "../metadata/types/ColumnTypes";
 
 /**
  */
 export interface Join {
     alias: Alias;
-    type: "LEFT"|"INNER";
+    type: "LEFT" | "INNER";
     condition?: string;
     tableName: string;
     mapToProperty?: string;
@@ -25,7 +26,7 @@ export interface Join {
 export interface JoinRelationId {
 
     alias: Alias;
-    type: "LEFT"|"INNER";
+    type: "LEFT" | "INNER";
     condition?: string;
     mapToProperty?: string;
 }
@@ -43,7 +44,7 @@ export interface RelationCountMeta {
 /**
  */
 export interface JoinMapping {
-    type: "join"|"relationId";
+    type: "join" | "relationId";
     alias: Alias;
     parentName: string;
     propertyName: string;
@@ -60,7 +61,7 @@ export class QueryBuilder<Entity> {
     // -------------------------------------------------------------------------
 
     protected aliasMap: AliasMap;
-    protected type: "select"|"update"|"delete" = "select";
+    protected type: "select" | "update" | "delete" = "select";
     protected selects: string[] = [];
     protected fromEntity: { alias: Alias };
     protected fromTableName: string;
@@ -70,8 +71,8 @@ export class QueryBuilder<Entity> {
     protected joinRelationIds: JoinRelationId[] = [];
     protected relationCountMetas: RelationCountMeta[] = [];
     protected groupBys: string[] = [];
-    protected wheres: { type: "simple"|"and"|"or", condition: string }[] = [];
-    protected havings: { type: "simple"|"and"|"or", condition: string }[] = [];
+    protected wheres: { type: "simple" | "and" | "or", condition: string }[] = [];
+    protected havings: { type: "simple" | "and" | "or", condition: string }[] = [];
     protected orderBys: OrderByCondition = {};
     protected parameters: ObjectLiteral = {};
     protected limit: number;
@@ -90,7 +91,7 @@ export class QueryBuilder<Entity> {
     // -------------------------------------------------------------------------
 
     constructor(protected connection: Connection,
-                protected queryRunnerProvider?: QueryRunnerProvider) {
+        protected queryRunnerProvider?: QueryRunnerProvider) {
         this.aliasMap = new AliasMap(connection);
     }
 
@@ -135,18 +136,18 @@ export class QueryBuilder<Entity> {
     /**
      * Creates UPDATE query and applies given update values.
      */
-    update(tableNameOrEntityOrUpdateSet?: string|Function|ObjectLiteral, maybeUpdateSet?: ObjectLiteral): this {
-        const updateSet = maybeUpdateSet ? maybeUpdateSet : <ObjectLiteral> tableNameOrEntityOrUpdateSet;
+    update(tableNameOrEntityOrUpdateSet?: string | Function | ObjectLiteral, maybeUpdateSet?: ObjectLiteral): this {
+        const updateSet = maybeUpdateSet ? maybeUpdateSet : <ObjectLiteral>tableNameOrEntityOrUpdateSet;
 
         if (tableNameOrEntityOrUpdateSet instanceof Function) {
-            const aliasName = (<any> tableNameOrEntityOrUpdateSet).name;
+            const aliasName = (<any>tableNameOrEntityOrUpdateSet).name;
             const aliasObj = new Alias(aliasName);
-            aliasObj.target = <Function> tableNameOrEntityOrUpdateSet;
+            aliasObj.target = <Function>tableNameOrEntityOrUpdateSet;
             this.aliasMap.addMainAlias(aliasObj);
             this.fromEntity = { alias: aliasObj };
 
         } else if (typeof tableNameOrEntityOrUpdateSet === "string") {
-            this.fromTableName = <string> tableNameOrEntityOrUpdateSet;
+            this.fromTableName = <string>tableNameOrEntityOrUpdateSet;
         }
 
         this.type = "update";
@@ -182,7 +183,7 @@ export class QueryBuilder<Entity> {
      * Creates SELECT query and selects given data.
      * Replaces all old selections if they exist.
      */
-    select(selection?: string|string[]): this {
+    select(selection?: string | string[]): this {
         this.type = "select";
         if (selection) {
             if (selection instanceof Array) {
@@ -212,7 +213,7 @@ export class QueryBuilder<Entity> {
     /**
      * Adds new selection to the SELECT query.
      */
-    addSelect(selection: string|string[]): this {
+    addSelect(selection: string | string[]): this {
         if (selection instanceof Array)
             this.selects = this.selects.concat(selection);
         else
@@ -225,11 +226,11 @@ export class QueryBuilder<Entity> {
      * Specifies FROM which entity's table select/update/delete will be executed.
      * Also sets a main string alias of the selection data.
      */
-    from(entityTarget: Function|string, alias: string): this {
+    from(entityTarget: Function | string, alias: string): this {
         const aliasObj = new Alias(alias);
         aliasObj.target = entityTarget;
         this.aliasMap.addMainAlias(aliasObj);
-        this.fromEntity = {alias: aliasObj};
+        this.fromEntity = { alias: aliasObj };
         return this;
     }
 
@@ -238,7 +239,7 @@ export class QueryBuilder<Entity> {
      * Also sets a main string alias of the selection data.
      */
     fromTable(tableName: string, alias: string) {
-        this.fromTableName = <string> tableName;
+        this.fromTableName = <string>tableName;
         this.fromTableAlias = alias;
         return this;
     }
@@ -256,7 +257,7 @@ export class QueryBuilder<Entity> {
      * You also need to specify an alias of the joined data.
      * Optionally, you can add condition and parameters used in condition.
      */
-    innerJoin(entity: Function|string, alias: string, condition?: string, options?: JoinOptions): this;
+    innerJoin(entity: Function | string, alias: string, condition?: string, options?: JoinOptions): this;
 
     /**
      * INNER JOINs (without selection) given table.
@@ -270,7 +271,7 @@ export class QueryBuilder<Entity> {
      * You also need to specify an alias of the joined data.
      * Optionally, you can add condition and parameters used in condition.
      */
-    innerJoin(entityOrProperty: Function|string, alias: string, condition: string = "", options?: JoinOptions): this {
+    innerJoin(entityOrProperty: Function | string, alias: string, condition: string = "", options?: JoinOptions): this {
         return this.join("INNER", entityOrProperty, alias, condition, options);
     }
 
@@ -287,7 +288,7 @@ export class QueryBuilder<Entity> {
      * You also need to specify an alias of the joined data.
      * Optionally, you can add condition and parameters used in condition.
      */
-    leftJoin(entity: Function|string, alias: string, condition?: string, options?: JoinOptions): this;
+    leftJoin(entity: Function | string, alias: string, condition?: string, options?: JoinOptions): this;
 
     /**
      * LEFT JOINs (without selection) given table.
@@ -301,7 +302,7 @@ export class QueryBuilder<Entity> {
      * You also need to specify an alias of the joined data.
      * Optionally, you can add condition and parameters used in condition.
      */
-    leftJoin(entityOrProperty: Function|string, alias: string, condition: string = "", options?: JoinOptions): this {
+    leftJoin(entityOrProperty: Function | string, alias: string, condition: string = "", options?: JoinOptions): this {
         return this.join("LEFT", entityOrProperty, alias, condition, options);
     }
 
@@ -318,7 +319,7 @@ export class QueryBuilder<Entity> {
      * You also need to specify an alias of the joined data.
      * Optionally, you can add condition and parameters used in condition.
      */
-    innerJoinAndSelect(entity: Function|string, alias: string, condition?: string, options?: JoinOptions): this;
+    innerJoinAndSelect(entity: Function | string, alias: string, condition?: string, options?: JoinOptions): this;
 
     /**
      * INNER JOINs table and adds all selection properties to SELECT.
@@ -332,7 +333,7 @@ export class QueryBuilder<Entity> {
      * You also need to specify an alias of the joined data.
      * Optionally, you can add condition and parameters used in condition.
      */
-    innerJoinAndSelect(entityOrProperty: Function|string, alias: string, condition: string = "", options?: JoinOptions): this {
+    innerJoinAndSelect(entityOrProperty: Function | string, alias: string, condition: string = "", options?: JoinOptions): this {
         this.addSelect(alias);
         return this.join("INNER", entityOrProperty, alias, condition, options);
     }
@@ -350,7 +351,7 @@ export class QueryBuilder<Entity> {
      * You also need to specify an alias of the joined data.
      * Optionally, you can add condition and parameters used in condition.
      */
-    leftJoinAndSelect(entity: Function|string, alias: string, condition?: string, options?: JoinOptions): this;
+    leftJoinAndSelect(entity: Function | string, alias: string, condition?: string, options?: JoinOptions): this;
 
     /**
      * LEFT JOINs table and adds all selection properties to SELECT.
@@ -364,7 +365,7 @@ export class QueryBuilder<Entity> {
      * You also need to specify an alias of the joined data.
      * Optionally, you can add condition and parameters used in condition.
      */
-    leftJoinAndSelect(entityOrProperty: Function|string, alias: string, condition: string = "", options?: JoinOptions): this {
+    leftJoinAndSelect(entityOrProperty: Function | string, alias: string, condition: string = "", options?: JoinOptions): this {
         this.addSelect(alias);
         return this.join("LEFT", entityOrProperty, alias, condition, options);
     }
@@ -386,7 +387,7 @@ export class QueryBuilder<Entity> {
      * You also need to specify an alias of the joined data.
      * Optionally, you can add condition and parameters used in condition.
      */
-    innerJoinAndMapMany(mapToProperty: string, entity: Function|string, alias: string, condition?: string, options?: JoinOptions): this;
+    innerJoinAndMapMany(mapToProperty: string, entity: Function | string, alias: string, condition?: string, options?: JoinOptions): this;
 
     /**
      * INNER JOINs table, SELECTs the data returned by a join and MAPs all that data to some entity's property.
@@ -404,7 +405,7 @@ export class QueryBuilder<Entity> {
      * You also need to specify an alias of the joined data.
      * Optionally, you can add condition and parameters used in condition.
      */
-    innerJoinAndMapMany(mapToProperty: string, entityOrProperty: Function|string, alias: string, condition: string = "", options?: JoinOptions): this {
+    innerJoinAndMapMany(mapToProperty: string, entityOrProperty: Function | string, alias: string, condition: string = "", options?: JoinOptions): this {
         this.addSelect(alias);
         return this.join("INNER", entityOrProperty, alias, condition, options, mapToProperty, true);
     }
@@ -426,7 +427,7 @@ export class QueryBuilder<Entity> {
      * You also need to specify an alias of the joined data.
      * Optionally, you can add condition and parameters used in condition.
      */
-    innerJoinAndMapOne(mapToProperty: string, entity: Function|string, alias: string, condition?: string, options?: JoinOptions): this;
+    innerJoinAndMapOne(mapToProperty: string, entity: Function | string, alias: string, condition?: string, options?: JoinOptions): this;
 
     /**
      * INNER JOINs table, SELECTs the data returned by a join and MAPs all that data to some entity's property.
@@ -444,7 +445,7 @@ export class QueryBuilder<Entity> {
      * You also need to specify an alias of the joined data.
      * Optionally, you can add condition and parameters used in condition.
      */
-    innerJoinAndMapOne(mapToProperty: string, entityOrProperty: Function|string, alias: string, condition: string = "", options?: JoinOptions): this {
+    innerJoinAndMapOne(mapToProperty: string, entityOrProperty: Function | string, alias: string, condition: string = "", options?: JoinOptions): this {
         this.addSelect(alias);
         return this.join("INNER", entityOrProperty, alias, condition, options, mapToProperty, false);
     }
@@ -466,7 +467,7 @@ export class QueryBuilder<Entity> {
      * You also need to specify an alias of the joined data.
      * Optionally, you can add condition and parameters used in condition.
      */
-    leftJoinAndMapMany(mapToProperty: string, entity: Function|string, alias: string, condition?: string, options?: JoinOptions): this;
+    leftJoinAndMapMany(mapToProperty: string, entity: Function | string, alias: string, condition?: string, options?: JoinOptions): this;
 
     /**
      * LEFT JOINs table, SELECTs the data returned by a join and MAPs all that data to some entity's property.
@@ -484,7 +485,7 @@ export class QueryBuilder<Entity> {
      * You also need to specify an alias of the joined data.
      * Optionally, you can add condition and parameters used in condition.
      */
-    leftJoinAndMapMany(mapToProperty: string, entityOrProperty: Function|string, alias: string, condition: string = "", options?: JoinOptions): this {
+    leftJoinAndMapMany(mapToProperty: string, entityOrProperty: Function | string, alias: string, condition: string = "", options?: JoinOptions): this {
         this.addSelect(alias);
         return this.join("LEFT", entityOrProperty, alias, condition, options, mapToProperty, true);
     }
@@ -506,7 +507,7 @@ export class QueryBuilder<Entity> {
      * You also need to specify an alias of the joined data.
      * Optionally, you can add condition and parameters used in condition.
      */
-    leftJoinAndMapOne(mapToProperty: string, entity: Function|string, alias: string, condition?: string, options?: JoinOptions): this;
+    leftJoinAndMapOne(mapToProperty: string, entity: Function | string, alias: string, condition?: string, options?: JoinOptions): this;
 
     /**
      * LEFT JOINs table, SELECTs the data returned by a join and MAPs all that data to some entity's property.
@@ -524,7 +525,7 @@ export class QueryBuilder<Entity> {
      * You also need to specify an alias of the joined data.
      * Optionally, you can add condition and parameters used in condition.
      */
-    leftJoinAndMapOne(mapToProperty: string, entityOrProperty: Function|string, alias: string, condition: string = "", options?: JoinOptions): this {
+    leftJoinAndMapOne(mapToProperty: string, entityOrProperty: Function | string, alias: string, condition: string = "", options?: JoinOptions): this {
         this.addSelect(alias);
         return this.join("LEFT", entityOrProperty, alias, condition, options, mapToProperty, false);
     }
@@ -728,7 +729,7 @@ export class QueryBuilder<Entity> {
      * If you had previously ORDER BY expression defined,
      * calling this function will override previously set ORDER BY conditions.
      */
-    orderBy(sort: string, order: "ASC"|"DESC" = "ASC"): this {
+    orderBy(sort: string, order: "ASC" | "DESC" = "ASC"): this {
         this.orderBys = { [sort]: order };
         return this;
     }
@@ -736,7 +737,7 @@ export class QueryBuilder<Entity> {
     /**
      * Adds ORDER BY condition in the query builder.
      */
-    addOrderBy(sort: string, order: "ASC"|"DESC" = "ASC"): this {
+    addOrderBy(sort: string, order: "ASC" | "DESC" = "ASC"): this {
         this.orderBys[sort] = order;
         return this;
     }
@@ -978,7 +979,7 @@ export class QueryBuilder<Entity> {
                                 condition = mainAliasName + "." + metadata.firstPrimaryColumn.propertyName + " IN (:ids)";
                             }
                         }
-                        const [queryWithIdsSql, queryWithIdsParameters] = this.clone({queryRunnerProvider: this.queryRunnerProvider})
+                        const [queryWithIdsSql, queryWithIdsParameters] = this.clone({ queryRunnerProvider: this.queryRunnerProvider })
                             .andWhere(condition, parameters)
                             .getSqlWithParameters();
                         return (queryRunner as QueryRunner).query(queryWithIdsSql, queryWithIdsParameters);
@@ -1066,13 +1067,13 @@ export class QueryBuilder<Entity> {
 
         const distinctAlias = this.connection.driver.escapeAliasName(mainAlias);
         let countSql = `COUNT(` + metadata.primaryColumnsWithParentIdColumns.map((primaryColumn, index) => {
-                const propertyName = this.connection.driver.escapeColumnName(primaryColumn.name);
-                if (index === 0) {
-                    return `DISTINCT(${distinctAlias}.${propertyName})`;
-                } else {
-                    return `${distinctAlias}.${propertyName})`;
-                }
-            }).join(", ") + ") as cnt";
+            const propertyName = this.connection.driver.escapeColumnName(primaryColumn.name);
+            if (index === 0) {
+                return `DISTINCT(${distinctAlias}.${propertyName})`;
+            } else {
+                return `${distinctAlias}.${propertyName})`;
+            }
+        }).join(", ") + ") as cnt";
 
         const countQuery = this
             .clone({
@@ -1137,7 +1138,7 @@ export class QueryBuilder<Entity> {
     /**
      * Gets single entity returned by execution of generated query builder sql.
      */
-    getOne(): Promise<Entity|undefined> {
+    getOne(): Promise<Entity | undefined> {
         return this.getMany().then(entities => entities[0]);
     }
 
@@ -1305,11 +1306,11 @@ export class QueryBuilder<Entity> {
 
             return queryBuilder
                 .select(`${parentMetadata.name + "." + parentMetadata.primaryColumn.propertyName} AS id`)
-                .addSelect(`COUNT(${ this.connection.driver.escapeAliasName(relation.propertyName) + "." + this.connection.driver.escapeColumnName(relation.inverseEntityMetadata.primaryColumn.name) }) as cnt`)
+                .addSelect(`COUNT(${this.connection.driver.escapeAliasName(relation.propertyName) + "." + this.connection.driver.escapeColumnName(relation.inverseEntityMetadata.primaryColumn.name)}) as cnt`)
                 .from(parentMetadata.target, parentMetadata.name)
                 .leftJoin(parentMetadata.name + "." + relation.propertyName, relation.propertyName, relationCountMeta.condition)
                 .setParameters(this.parameters)
-                .where(`${parentMetadata.name + "." + parentMetadata.primaryColumn.propertyName} IN (:relationCountIds)`, {relationCountIds: ids})
+                .where(`${parentMetadata.name + "." + parentMetadata.primaryColumn.propertyName} IN (:relationCountIds)`, { relationCountIds: ids })
                 .groupBy(parentMetadata.name + "." + parentMetadata.primaryColumn.propertyName)
                 .getRawMany()
                 .then((results: { id: any, cnt: any }[]) => {
@@ -1366,7 +1367,11 @@ export class QueryBuilder<Entity> {
             // add select from the main table
             if (this.selects.indexOf(alias) !== -1) {
                 metadata.columns.forEach(column => {
-                    allSelects.push(this.connection.driver.escapeAliasName(alias) + "." + this.connection.driver.escapeColumnName(column.name) + " AS " + this.connection.driver.escapeAliasName(alias + "_" + column.name));
+                    let columnName = this.connection.driver.escapeAliasName(alias) + "." + this.connection.driver.escapeColumnName(column.name);
+                    if (column.type === ColumnTypes.POINT) {
+                        columnName = `ST_AsGeoJSON(${columnName})`;
+                    }
+                    allSelects.push(columnName + " AS " + this.connection.driver.escapeAliasName(alias + "_" + column.name));
                 });
             }
 
@@ -1453,12 +1458,12 @@ export class QueryBuilder<Entity> {
                 return "SELECT " + allSelects.join(", ") + " FROM " + this.connection.driver.escapeTableName(tableName) + " " + this.connection.driver.escapeAliasName(alias);
             case "delete":
                 return "DELETE FROM " + this.connection.driver.escapeTableName(tableName);
-                // return "DELETE " + (alias ? this.connection.driver.escapeAliasName(alias) : "") + " FROM " + this.connection.driver.escapeTableName(tableName) + " " + (alias ? this.connection.driver.escapeAliasName(alias) : ""); // TODO: only mysql supports aliasing, so what to do with aliases in DELETE queries? right now aliases are used however we are relaying that they will always match a table names
+            // return "DELETE " + (alias ? this.connection.driver.escapeAliasName(alias) : "") + " FROM " + this.connection.driver.escapeTableName(tableName) + " " + (alias ? this.connection.driver.escapeAliasName(alias) : ""); // TODO: only mysql supports aliasing, so what to do with aliases in DELETE queries? right now aliases are used however we are relaying that they will always match a table names
             case "update":
                 const updateSet = Object.keys(this.updateQuerySet).map(key => key + "=:updateQuerySet_" + key);
                 const params = Object.keys(this.updateQuerySet).reduce((object, key) => {
                     // todo: map propertyNames to names ?
-                    (<any> object)["updateQuerySet_" + key] = (<any> this.updateQuerySet)[key];
+                    (<any>object)["updateQuerySet_" + key] = (<any>this.updateQuerySet)[key];
                     return object;
                 }, {});
                 this.setParameters(params);
@@ -1484,7 +1489,7 @@ export class QueryBuilder<Entity> {
         if (!this.fromTableName) {
             const mainMetadata = this.connection.getMetadata(this.aliasMap.mainAlias.target);
             if (mainMetadata.hasDiscriminatorColumn)
-                return ` WHERE ${ conditions.length ? "(" + conditions + ") AND" : "" } ${mainMetadata.discriminatorColumn.name}=:discriminatorColumnValue`;
+                return ` WHERE ${conditions.length ? "(" + conditions + ") AND" : ""} ${mainMetadata.discriminatorColumn.name}=:discriminatorColumnValue`;
 
         }
 
@@ -1566,7 +1571,7 @@ export class QueryBuilder<Entity> {
 
             const parentAlias = join.alias.parentAliasName;
             if (!parentAlias) {
-                return " " + joinType + " JOIN " + this.connection.driver.escapeTableName(joinTableName) + " " + this.connection.driver.escapeAliasName(join.alias.name) + " " + (join.condition ? ( "ON " + this.replacePropertyNames(join.condition) ) : "");
+                return " " + joinType + " JOIN " + this.connection.driver.escapeTableName(joinTableName) + " " + this.connection.driver.escapeAliasName(join.alias.name) + " " + (join.condition ? ("ON " + this.replacePropertyNames(join.condition)) : "");
             }
 
             const foundAlias = this.aliasMap.findAliasByName(parentAlias);
@@ -1599,7 +1604,7 @@ export class QueryBuilder<Entity> {
                 }
 
                 return " " + joinType + " JOIN " + this.connection.driver.escapeTableName(junctionTable) + " " + this.connection.driver.escapeAliasName(junctionAlias) + " ON " + condition1 +
-                       " " + joinType + " JOIN " + this.connection.driver.escapeTableName(joinTableName) + " " + this.connection.driver.escapeAliasName(joinAlias) + " ON " + condition2 + appendedCondition;
+                    " " + joinType + " JOIN " + this.connection.driver.escapeTableName(joinTableName) + " " + this.connection.driver.escapeAliasName(joinAlias) + " ON " + condition2 + appendedCondition;
 
             } else if (relation.isManyToOne || (relation.isOneToOne && relation.isOwning)) {
                 const joinTableColumn = relation.joinColumn.referencedColumn.name;
@@ -1670,15 +1675,15 @@ export class QueryBuilder<Entity> {
     protected createHavingExpression() {
         if (!this.havings || !this.havings.length) return "";
         return " HAVING " + this.havings.map(having => {
-                switch (having.type) {
-                    case "and":
-                        return " AND " + this.replacePropertyNames(having.condition);
-                    case "or":
-                        return " OR " + this.replacePropertyNames(having.condition);
-                    default:
-                        return " " + this.replacePropertyNames(having.condition);
-                }
-            }).join(" ");
+            switch (having.type) {
+                case "and":
+                    return " AND " + this.replacePropertyNames(having.condition);
+                case "or":
+                    return " OR " + this.replacePropertyNames(having.condition);
+                default:
+                    return " " + this.replacePropertyNames(having.condition);
+            }
+        }).join(" ");
     }
 
     protected createOrderByCombinedWithSelectExpression(parentAlias: string) {
@@ -1720,10 +1725,10 @@ export class QueryBuilder<Entity> {
         // if user specified a custom order then apply it
         if (Object.keys(orderBys).length > 0)
             return " ORDER BY " + Object.keys(orderBys)
-                    .map(columnName => {
-                        return this.replacePropertyNames(columnName) + " " + this.orderBys[columnName];
-                    })
-                    .join(", ");
+                .map(columnName => {
+                    return this.replacePropertyNames(columnName) + " " + this.orderBys[columnName];
+                })
+                .join(", ");
 
         return "";
     }
@@ -1769,10 +1774,10 @@ export class QueryBuilder<Entity> {
         return mappings;
     }
 
-    protected join(joinType: "INNER"|"LEFT", property: string, alias: string, condition?: string, options?: JoinOptions, mapToProperty?: string, isMappingMany?: boolean): this;
-    protected join(joinType: "INNER"|"LEFT", entity: Function, alias: string, condition?: string, options?: JoinOptions, mapToProperty?: string, isMappingMany?: boolean): this;
-    protected join(joinType: "INNER"|"LEFT", entityOrProperty: Function|string, alias: string, condition: string, options?: JoinOptions, mapToProperty?: string, isMappingMany?: boolean): this;
-    protected join(joinType: "INNER"|"LEFT", entityOrProperty: Function|string, alias: string, condition: string = "", options?: JoinOptions, mapToProperty?: string, isMappingMany: boolean = false): this {
+    protected join(joinType: "INNER" | "LEFT", property: string, alias: string, condition?: string, options?: JoinOptions, mapToProperty?: string, isMappingMany?: boolean): this;
+    protected join(joinType: "INNER" | "LEFT", entity: Function, alias: string, condition?: string, options?: JoinOptions, mapToProperty?: string, isMappingMany?: boolean): this;
+    protected join(joinType: "INNER" | "LEFT", entityOrProperty: Function | string, alias: string, condition: string, options?: JoinOptions, mapToProperty?: string, isMappingMany?: boolean): this;
+    protected join(joinType: "INNER" | "LEFT", entityOrProperty: Function | string, alias: string, condition: string = "", options?: JoinOptions, mapToProperty?: string, isMappingMany: boolean = false): this {
 
         // todo: entityOrProperty can be a table name. implement if its a table
         // todo: entityOrProperty can be target name. implement proper behaviour if it is.
@@ -1805,7 +1810,7 @@ export class QueryBuilder<Entity> {
         return this;
     }
 
-    protected joinRelationId(joinType: "LEFT"|"INNER", mapToProperty: string|undefined, property: string, condition?: string): this {
+    protected joinRelationId(joinType: "LEFT" | "INNER", mapToProperty: string | undefined, property: string, condition?: string): this {
 
         if (!this.isPropertyAlias(property))
             throw new Error("Only entity relations are allowed in the leftJoinRelationId operation"); // todo: also check if that relation really has entityId

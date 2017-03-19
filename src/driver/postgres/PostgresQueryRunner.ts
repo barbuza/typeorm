@@ -1,20 +1,21 @@
-import {QueryRunner} from "../../query-runner/QueryRunner";
-import {ObjectLiteral} from "../../common/ObjectLiteral";
-import {Logger} from "../../logger/Logger";
-import {DatabaseConnection} from "../DatabaseConnection";
-import {TransactionAlreadyStartedError} from "../error/TransactionAlreadyStartedError";
-import {TransactionNotStartedError} from "../error/TransactionNotStartedError";
-import {PostgresDriver} from "./PostgresDriver";
-import {DataTypeNotSupportedByDriverError} from "../error/DataTypeNotSupportedByDriverError";
-import {ColumnSchema} from "../../schema-builder/schema/ColumnSchema";
-import {ColumnMetadata} from "../../metadata/ColumnMetadata";
-import {TableSchema} from "../../schema-builder/schema/TableSchema";
-import {IndexSchema} from "../../schema-builder/schema/IndexSchema";
-import {ForeignKeySchema} from "../../schema-builder/schema/ForeignKeySchema";
-import {PrimaryKeySchema} from "../../schema-builder/schema/PrimaryKeySchema";
-import {QueryRunnerAlreadyReleasedError} from "../../query-runner/error/QueryRunnerAlreadyReleasedError";
-import {NamingStrategyInterface} from "../../naming-strategy/NamingStrategyInterface";
-import {ColumnType} from "../../metadata/types/ColumnTypes";
+import { QueryRunner } from "../../query-runner/QueryRunner";
+import { ObjectLiteral } from "../../common/ObjectLiteral";
+import { Logger } from "../../logger/Logger";
+import { DatabaseConnection } from "../DatabaseConnection";
+import { TransactionAlreadyStartedError } from "../error/TransactionAlreadyStartedError";
+import { TransactionNotStartedError } from "../error/TransactionNotStartedError";
+import { PostgresDriver } from "./PostgresDriver";
+import { DataTypeNotSupportedByDriverError } from "../error/DataTypeNotSupportedByDriverError";
+import { ColumnSchema } from "../../schema-builder/schema/ColumnSchema";
+import { ColumnMetadata } from "../../metadata/ColumnMetadata";
+import { TableSchema } from "../../schema-builder/schema/TableSchema";
+import { IndexSchema } from "../../schema-builder/schema/IndexSchema";
+import { ForeignKeySchema } from "../../schema-builder/schema/ForeignKeySchema";
+import { PrimaryKeySchema } from "../../schema-builder/schema/PrimaryKeySchema";
+import { QueryRunnerAlreadyReleasedError } from "../../query-runner/error/QueryRunnerAlreadyReleasedError";
+import { NamingStrategyInterface } from "../../naming-strategy/NamingStrategyInterface";
+import { ColumnType } from "../../metadata/types/ColumnTypes";
+import { Point } from "./Point";
 
 /**
  * Runs queries on a single postgres database connection.
@@ -38,8 +39,8 @@ export class PostgresQueryRunner implements QueryRunner {
     // -------------------------------------------------------------------------
 
     constructor(protected databaseConnection: DatabaseConnection,
-                protected driver: PostgresDriver,
-                protected logger: Logger) {
+        protected driver: PostgresDriver,
+        protected logger: Logger) {
         this.schemaName = driver.schemaName || "public";
     }
 
@@ -69,7 +70,7 @@ export class PostgresQueryRunner implements QueryRunner {
 
         await this.beginTransaction();
         try {
-            const selectDropsQuery = `SELECT 'DROP TABLE IF EXISTS "' || tablename || '" CASCADE;' as query FROM pg_tables WHERE schemaname = '${this.schemaName}'`;
+            const selectDropsQuery = `SELECT 'DROP TABLE IF EXISTS "' || tablename || '" CASCADE;' as query FROM pg_tables WHERE tablename != 'spatial_ref_sys' AND schemaname = '${this.schemaName}'`;
             const dropQueries: ObjectLiteral[] = await this.query(selectDropsQuery);
             await Promise.all(dropQueries.map(q => this.query(q["query"])));
 
@@ -153,6 +154,35 @@ export class PostgresQueryRunner implements QueryRunner {
         });
     }
 
+    protected mapKeyValues(keyValues: ObjectLiteral, startIndex: number = 0): { values: string[], parameters: any[] } {
+        const keys = Object.keys(keyValues);
+        const values = keys.reduce((acc, key) => {
+            const value = keyValues[key];
+            if (value instanceof Point) {
+                return {
+                    values: [...acc.values, value.asWhere(acc.startIndex)],
+                    startIndex: acc.startIndex + 2,
+                };
+            }
+            return {
+                values: [...acc.values, `$${acc.startIndex + 1}`],
+                startIndex: acc.startIndex + 1,
+            };
+        }, { values: [] as string[], startIndex }).values;
+
+        const parameters: any[] = [];
+        keys.forEach(key => {
+            const value = keyValues[key];
+            if (value instanceof Point) {
+                parameters.push(...value.asParams());
+            } else {
+                parameters.push(value);
+            }
+        });
+
+        return { values, parameters };
+    }
+
     /**
      * Insert a new row into given table.
      */
@@ -162,11 +192,12 @@ export class PostgresQueryRunner implements QueryRunner {
 
         const keys = Object.keys(keyValues);
         const columns = keys.map(key => this.driver.escapeColumnName(key)).join(", ");
-        const values = keys.map((key, index) => "$" + (index + 1)).join(",");
+
+        const { values, parameters } = this.mapKeyValues(keyValues);
+
         const sql = columns.length > 0
-            ? `INSERT INTO ${this.driver.escapeTableName(tableName)}(${columns}) VALUES (${values}) ${ generatedColumn ? " RETURNING " + this.driver.escapeColumnName(generatedColumn.name) : "" }`
-            : `INSERT INTO ${this.driver.escapeTableName(tableName)} DEFAULT VALUES ${ generatedColumn ? " RETURNING " + this.driver.escapeColumnName(generatedColumn.name) : "" }`;
-        const parameters = keys.map(key => keyValues[key]);
+            ? `INSERT INTO ${this.driver.escapeTableName(tableName)}(${columns}) VALUES (${values}) ${generatedColumn ? " RETURNING " + this.driver.escapeColumnName(generatedColumn.name) : ""}`
+            : `INSERT INTO ${this.driver.escapeTableName(tableName)} DEFAULT VALUES ${generatedColumn ? " RETURNING " + this.driver.escapeColumnName(generatedColumn.name) : ""}`;
         const result: ObjectLiteral[] = await this.query(sql, parameters);
         if (generatedColumn)
             return result[0][generatedColumn.name];
@@ -181,12 +212,15 @@ export class PostgresQueryRunner implements QueryRunner {
         if (this.isReleased)
             throw new QueryRunnerAlreadyReleasedError();
 
+        const { parameters: updateParametersList } = this.mapKeyValues(valuesMap);
+        const { parameters: conditionParametersList } = this.mapKeyValues(conditions, updateParametersList.length);
+
         const updateValues = this.parametrize(valuesMap).join(", ");
-        const conditionString = this.parametrize(conditions, Object.keys(valuesMap).length).join(" AND ");
+        const conditionString = this.parametrize(conditions, updateParametersList.length).join(" AND ");
         const query = `UPDATE ${this.driver.escapeTableName(tableName)} SET ${updateValues} ${conditionString ? (" WHERE " + conditionString) : ""}`;
-        const updateParams = Object.keys(valuesMap).map(key => valuesMap[key]);
-        const conditionParams = Object.keys(conditions).map(key => conditions[key]);
-        const allParameters = updateParams.concat(conditionParams);
+        // const updateParams = Object.keys(valuesMap).map(key => valuesMap[key]);
+        // const conditionParams = Object.keys(conditions).map(key => conditions[key]);
+        const allParameters = updateParametersList.concat(conditionParametersList);
         await this.query(query, allParameters);
     }
 
@@ -203,12 +237,23 @@ export class PostgresQueryRunner implements QueryRunner {
     /**
      * Deletes from the given table by a given conditions.
      */
-    async delete(tableName: string, conditions: ObjectLiteral|string, maybeParameters?: any[]): Promise<void> {
+    async delete(tableName: string, conditions: ObjectLiteral | string, maybeParameters?: any[]): Promise<void> {
         if (this.isReleased)
             throw new QueryRunnerAlreadyReleasedError();
 
-        const conditionString = typeof conditions === "string" ? conditions : this.parametrize(conditions).join(" AND ");
-        const parameters = conditions instanceof Object ? Object.keys(conditions).map(key => (conditions as ObjectLiteral)[key]) : maybeParameters;
+        let conditionString: string;
+        let parameters: any[] | undefined;
+        if (typeof conditions === "string") {
+            conditionString = conditions;
+            parameters = maybeParameters;
+        } else {
+            const { parameters: conditionParams } = this.mapKeyValues(conditions);
+            conditionString = this.parametrize(conditions).join(" AND ");
+            parameters = conditionParams;
+        }
+
+        // const conditionString = typeof conditions === "string" ? conditions : this.parametrize(conditions).join(" AND ");
+        // const parameters = conditions instanceof Object ? Object.keys(conditions).map(key => (conditions as ObjectLiteral)[key]) : maybeParameters;
 
         const sql = `DELETE FROM ${this.driver.escapeTableName(tableName)} WHERE ${conditionString}`;
         await this.query(sql, parameters);
@@ -239,7 +284,7 @@ export class PostgresQueryRunner implements QueryRunner {
     /**
      * Loads given table's data from the database.
      */
-    async loadTableSchema(tableName: string): Promise<TableSchema|undefined> {
+    async loadTableSchema(tableName: string): Promise<TableSchema | undefined> {
         const tableSchemas = await this.loadTableSchemas([tableName]);
         return tableSchemas.length > 0 ? tableSchemas[0] : undefined;
     }
@@ -257,13 +302,13 @@ export class PostgresQueryRunner implements QueryRunner {
 
         // load tables, columns, indices and foreign keys
         const tableNamesString = tableNames.map(name => "'" + name + "'").join(", ");
-        const tablesSql      = `SELECT * FROM information_schema.tables WHERE table_catalog = '${this.dbName}' AND table_schema = '${this.schemaName}' AND table_name IN (${tableNamesString})`;
-        const columnsSql     = `SELECT * FROM information_schema.columns WHERE table_catalog = '${this.dbName}' AND table_schema = '${this.schemaName}'`;
-        const indicesSql     = `SELECT t.relname AS table_name, i.relname AS index_name, a.attname AS column_name  FROM pg_class t, pg_class i, pg_index ix, pg_attribute a
+        const tablesSql = `SELECT * FROM information_schema.tables WHERE table_catalog = '${this.dbName}' AND table_schema = '${this.schemaName}' AND table_name IN (${tableNamesString})`;
+        const columnsSql = `SELECT * FROM information_schema.columns WHERE table_catalog = '${this.dbName}' AND table_schema = '${this.schemaName}'`;
+        const indicesSql = `SELECT t.relname AS table_name, i.relname AS index_name, a.attname AS column_name  FROM pg_class t, pg_class i, pg_index ix, pg_attribute a
 WHERE t.oid = ix.indrelid AND i.oid = ix.indexrelid AND a.attrelid = t.oid
 AND a.attnum = ANY(ix.indkey) AND t.relkind = 'r' AND t.relname IN (${tableNamesString}) ORDER BY t.relname, i.relname`;
         const foreignKeysSql = `SELECT table_name, constraint_name FROM information_schema.table_constraints WHERE table_catalog = '${this.dbName}' AND constraint_type = 'FOREIGN KEY'`;
-        const uniqueKeysSql  = `SELECT * FROM information_schema.table_constraints WHERE table_catalog = '${this.dbName}' AND constraint_type = 'UNIQUE'`;
+        const uniqueKeysSql = `SELECT * FROM information_schema.table_constraints WHERE table_catalog = '${this.dbName}' AND constraint_type = 'UNIQUE'`;
         const primaryKeysSql = `SELECT c.column_name, tc.table_name, tc.constraint_name FROM information_schema.table_constraints tc
 JOIN information_schema.constraint_column_usage AS ccu USING (constraint_schema, constraint_name)
 JOIN information_schema.columns AS c ON c.table_schema = tc.constraint_schema AND tc.table_name = c.table_name AND ccu.column_name = c.column_name
@@ -290,8 +335,8 @@ where constraint_type = 'PRIMARY KEY' and tc.table_catalog = '${this.dbName}'`;
                 .filter(dbColumn => dbColumn["table_name"] === tableSchema.name)
                 .map(dbColumn => {
                     const columnType = dbColumn["data_type"].toLowerCase() + (dbColumn["character_maximum_length"] !== undefined && dbColumn["character_maximum_length"] !== null ? ("(" + dbColumn["character_maximum_length"] + ")") : "");
-                    const isGenerated = dbColumn["column_default"] === `nextval('${dbColumn["table_name"]}_id_seq'::regclass)` 
-                        || dbColumn["column_default"] === `nextval('"${dbColumn["table_name"]}_id_seq"'::regclass)` 
+                    const isGenerated = dbColumn["column_default"] === `nextval('${dbColumn["table_name"]}_id_seq'::regclass)`
+                        || dbColumn["column_default"] === `nextval('"${dbColumn["table_name"]}_id_seq"'::regclass)`
                         || /^uuid\_generate\_v\d\(\)/.test(dbColumn["column_default"]);
 
                     const columnSchema = new ColumnSchema();
@@ -302,7 +347,7 @@ where constraint_type = 'PRIMARY KEY' and tc.table_catalog = '${this.dbName}'`;
                     // columnSchema.isPrimary = dbColumn["column_key"].indexOf("PRI") !== -1;
                     columnSchema.isGenerated = isGenerated;
                     columnSchema.comment = ""; // dbColumn["COLUMN_COMMENT"];
-                    columnSchema.isUnique = !!dbUniqueKeys.find(key => key["constraint_name"] ===  `uk_${dbColumn["table_name"]}_${dbColumn["column_name"]}`);
+                    columnSchema.isUnique = !!dbUniqueKeys.find(key => key["constraint_name"] === `uk_${dbColumn["table_name"]}_${dbColumn["column_name"]}`);
                     return columnSchema;
                 });
 
@@ -396,7 +441,7 @@ where constraint_type = 'PRIMARY KEY' and tc.table_catalog = '${this.dbName}'`;
     /**
      * Creates a new column from the column schema in the table.
      */
-    async addColumn(tableSchemaOrName: TableSchema|string, column: ColumnSchema): Promise<void> {
+    async addColumn(tableSchemaOrName: TableSchema | string, column: ColumnSchema): Promise<void> {
         if (this.isReleased)
             throw new QueryRunnerAlreadyReleasedError();
 
@@ -418,7 +463,7 @@ where constraint_type = 'PRIMARY KEY' and tc.table_catalog = '${this.dbName}'`;
     /**
      * Creates a new columns from the column schema in the table.
      */
-    async addColumns(tableSchemaOrName: TableSchema|string, columns: ColumnSchema[]): Promise<void> {
+    async addColumns(tableSchemaOrName: TableSchema | string, columns: ColumnSchema[]): Promise<void> {
         if (this.isReleased)
             throw new QueryRunnerAlreadyReleasedError();
 
@@ -439,9 +484,9 @@ where constraint_type = 'PRIMARY KEY' and tc.table_catalog = '${this.dbName}'`;
     /**
      * Renames column in the given table.
      */
-    async renameColumn(tableSchemaOrName: TableSchema|string, oldColumnSchemaOrName: ColumnSchema|string, newColumnSchemaOrName: ColumnSchema|string): Promise<void> {
+    async renameColumn(tableSchemaOrName: TableSchema | string, oldColumnSchemaOrName: ColumnSchema | string, newColumnSchemaOrName: ColumnSchema | string): Promise<void> {
 
-        let tableSchema: TableSchema|undefined = undefined;
+        let tableSchema: TableSchema | undefined = undefined;
         if (tableSchemaOrName instanceof TableSchema) {
             tableSchema = tableSchemaOrName;
         } else {
@@ -451,7 +496,7 @@ where constraint_type = 'PRIMARY KEY' and tc.table_catalog = '${this.dbName}'`;
         if (!tableSchema)
             throw new Error(`Table ${tableSchemaOrName} was not found.`);
 
-        let oldColumn: ColumnSchema|undefined = undefined;
+        let oldColumn: ColumnSchema | undefined = undefined;
         if (oldColumnSchemaOrName instanceof ColumnSchema) {
             oldColumn = oldColumnSchemaOrName;
         } else {
@@ -461,7 +506,7 @@ where constraint_type = 'PRIMARY KEY' and tc.table_catalog = '${this.dbName}'`;
         if (!oldColumn)
             throw new Error(`Column "${oldColumnSchemaOrName}" was not found in the "${tableSchemaOrName}" table.`);
 
-        let newColumn: ColumnSchema|undefined = undefined;
+        let newColumn: ColumnSchema | undefined = undefined;
         if (newColumnSchemaOrName instanceof ColumnSchema) {
             newColumn = newColumnSchemaOrName;
         } else {
@@ -485,11 +530,11 @@ where constraint_type = 'PRIMARY KEY' and tc.table_catalog = '${this.dbName}'`;
     /**
      * Changes a column in the table.
      */
-    async changeColumn(tableSchemaOrName: TableSchema|string, oldColumnSchemaOrName: ColumnSchema|string, newColumn: ColumnSchema): Promise<void> {
+    async changeColumn(tableSchemaOrName: TableSchema | string, oldColumnSchemaOrName: ColumnSchema | string, newColumn: ColumnSchema): Promise<void> {
         if (this.isReleased)
             throw new QueryRunnerAlreadyReleasedError();
 
-        let tableSchema: TableSchema|undefined = undefined;
+        let tableSchema: TableSchema | undefined = undefined;
         if (tableSchemaOrName instanceof TableSchema) {
             tableSchema = tableSchemaOrName;
         } else {
@@ -499,7 +544,7 @@ where constraint_type = 'PRIMARY KEY' and tc.table_catalog = '${this.dbName}'`;
         if (!tableSchema)
             throw new Error(`Table ${tableSchemaOrName} was not found.`);
 
-        let oldColumn: ColumnSchema|undefined = undefined;
+        let oldColumn: ColumnSchema | undefined = undefined;
         if (oldColumnSchemaOrName instanceof ColumnSchema) {
             oldColumn = oldColumnSchemaOrName;
         } else {
@@ -585,7 +630,7 @@ where constraint_type = 'PRIMARY KEY' and tc.table_catalog = '${this.dbName}'`;
     /**
      * Drops column in the table.
      */
-    async dropColumn(tableSchemaOrName: TableSchema|string, columnSchemaOrName: ColumnSchema|string): Promise<void> {
+    async dropColumn(tableSchemaOrName: TableSchema | string, columnSchemaOrName: ColumnSchema | string): Promise<void> {
         const tableName = tableSchemaOrName instanceof TableSchema ? tableSchemaOrName.name : tableSchemaOrName;
         const columnName = columnSchemaOrName instanceof ColumnSchema ? columnSchemaOrName.name : columnSchemaOrName;
         return this.query(`ALTER TABLE "${tableName}" DROP "${columnName}"`);
@@ -604,7 +649,7 @@ where constraint_type = 'PRIMARY KEY' and tc.table_catalog = '${this.dbName}'`;
     /**
      * Drops the columns in the table.
      */
-    async dropColumns(tableSchemaOrName: TableSchema|string, columnSchemasOrNames: ColumnSchema[]|string[]): Promise<void> {
+    async dropColumns(tableSchemaOrName: TableSchema | string, columnSchemasOrNames: ColumnSchema[] | string[]): Promise<void> {
         if (this.isReleased)
             throw new QueryRunnerAlreadyReleasedError();
 
@@ -639,7 +684,7 @@ where constraint_type = 'PRIMARY KEY' and tc.table_catalog = '${this.dbName}'`;
     /**
      * Creates a new foreign key.
      */
-    async createForeignKey(tableSchemaOrName: TableSchema|string, foreignKey: ForeignKeySchema): Promise<void> {
+    async createForeignKey(tableSchemaOrName: TableSchema | string, foreignKey: ForeignKeySchema): Promise<void> {
         if (this.isReleased)
             throw new QueryRunnerAlreadyReleasedError();
 
@@ -664,7 +709,7 @@ where constraint_type = 'PRIMARY KEY' and tc.table_catalog = '${this.dbName}'`;
     /**
      * Creates a new foreign keys.
      */
-    async createForeignKeys(tableSchemaOrName: TableSchema|string, foreignKeys: ForeignKeySchema[]): Promise<void> {
+    async createForeignKeys(tableSchemaOrName: TableSchema | string, foreignKeys: ForeignKeySchema[]): Promise<void> {
         if (this.isReleased)
             throw new QueryRunnerAlreadyReleasedError();
 
@@ -685,7 +730,7 @@ where constraint_type = 'PRIMARY KEY' and tc.table_catalog = '${this.dbName}'`;
     /**
      * Drops a foreign key from the table.
      */
-    async dropForeignKey(tableSchemaOrName: TableSchema|string, foreignKey: ForeignKeySchema): Promise<void> {
+    async dropForeignKey(tableSchemaOrName: TableSchema | string, foreignKey: ForeignKeySchema): Promise<void> {
         if (this.isReleased)
             throw new QueryRunnerAlreadyReleasedError();
 
@@ -707,7 +752,7 @@ where constraint_type = 'PRIMARY KEY' and tc.table_catalog = '${this.dbName}'`;
     /**
      * Drops a foreign keys from the table.
      */
-    async dropForeignKeys(tableSchemaOrName: TableSchema|string, foreignKeys: ForeignKeySchema[]): Promise<void> {
+    async dropForeignKeys(tableSchemaOrName: TableSchema | string, foreignKeys: ForeignKeySchema[]): Promise<void> {
         if (this.isReleased)
             throw new QueryRunnerAlreadyReleasedError();
 
@@ -745,7 +790,7 @@ where constraint_type = 'PRIMARY KEY' and tc.table_catalog = '${this.dbName}'`;
     /**
      * Creates a database type from a given column metadata.
      */
-    normalizeType(typeOptions: { type: ColumnType, length?: string|number, precision?: number, scale?: number, timezone?: boolean }): string {
+    normalizeType(typeOptions: { type: ColumnType, length?: string | number, precision?: number, scale?: number, timezone?: boolean }): string {
         switch (typeOptions.type) {
             case "string":
                 return "character varying(" + (typeOptions.length ? typeOptions.length : 255) + ")";
@@ -801,6 +846,8 @@ where constraint_type = 'PRIMARY KEY' and tc.table_catalog = '${this.dbName}'`;
                 return typeOptions.length ? "character varying(" + typeOptions.length + ")" : "text";
             case "uuid":
                 return "uuid";
+            case "point":
+                return `geometry(point, ${Point.SRID})`;
         }
 
         throw new DataTypeNotSupportedByDriverError(typeOptions.type, "Postgres");
@@ -843,7 +890,8 @@ where constraint_type = 'PRIMARY KEY' and tc.table_catalog = '${this.dbName}'`;
      * Parametrizes given object of values. Used to create column=value queries.
      */
     protected parametrize(objectLiteral: ObjectLiteral, startIndex: number = 0): string[] {
-        return Object.keys(objectLiteral).map((key, index) => this.driver.escapeColumnName(key) + "=$" + (startIndex + index + 1));
+        const { values } = this.mapKeyValues(objectLiteral, startIndex);
+        return Object.keys(objectLiteral).map((key, index) => this.driver.escapeColumnName(key) + "=" + values[index]);
     }
 
     /**

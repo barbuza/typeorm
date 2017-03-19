@@ -1,10 +1,10 @@
-import {ColumnSchema} from "./ColumnSchema";
-import {IndexSchema} from "./IndexSchema";
-import {ForeignKeySchema} from "./ForeignKeySchema";
-import {PrimaryKeySchema} from "./PrimaryKeySchema";
-import {ColumnMetadata} from "../../metadata/ColumnMetadata";
-import {QueryRunner} from "../../query-runner/QueryRunner";
-import {ObjectLiteral} from "../../common/ObjectLiteral";
+import { ColumnSchema } from "./ColumnSchema";
+import { IndexSchema } from "./IndexSchema";
+import { ForeignKeySchema } from "./ForeignKeySchema";
+import { PrimaryKeySchema } from "./PrimaryKeySchema";
+import { ColumnMetadata } from "../../metadata/ColumnMetadata";
+import { QueryRunner } from "../../query-runner/QueryRunner";
+import { ObjectLiteral } from "../../common/ObjectLiteral";
 
 /**
  * Table schema in the database represented in this class.
@@ -51,10 +51,10 @@ export class TableSchema {
     // Constructor
     // -------------------------------------------------------------------------
 
-    constructor(name: string, columns?: ColumnSchema[]|ObjectLiteral[], justCreated?: boolean) {
+    constructor(name: string, columns?: ColumnSchema[] | ObjectLiteral[], justCreated?: boolean) {
         this.name = name;
         if (columns) {
-            this.columns = columns.map(column => {
+            this.columns = (columns as Array<ColumnSchema | ObjectLiteral>).map(column => {
                 if (column instanceof ColumnSchema) {
                     return column;
                 } else {
@@ -201,14 +201,14 @@ export class TableSchema {
             if (!columnMetadata)
                 return false; // we don't need new columns, we only need exist and changed
 
-            return  columnSchema.name !== columnMetadata.name ||
-                    columnSchema.type !== queryRunner.normalizeType(columnMetadata) ||
-                    columnSchema.comment !== columnMetadata.comment ||
-                    (!columnSchema.isGenerated && !queryRunner.compareDefaultValues(columnMetadata.default, columnSchema.default)) || // we included check for generated here, because generated columns already can have default values
-                    columnSchema.isNullable !== columnMetadata.isNullable ||
-                    columnSchema.isUnique !== columnMetadata.isUnique ||
-                    // columnSchema.isPrimary !== columnMetadata.isPrimary ||
-                    columnSchema.isGenerated !== columnMetadata.isGenerated;
+            return columnSchema.name !== columnMetadata.name ||
+                columnSchema.type !== queryRunner.normalizeType(columnMetadata) ||
+                columnSchema.comment !== columnMetadata.comment ||
+                (!columnSchema.isGenerated && !queryRunner.compareDefaultValues(columnMetadata.default, columnSchema.default)) || // we included check for generated here, because generated columns already can have default values
+                columnSchema.isNullable !== columnMetadata.isNullable ||
+                columnSchema.isUnique !== columnMetadata.isUnique ||
+                // columnSchema.isPrimary !== columnMetadata.isPrimary ||
+                columnSchema.isGenerated !== columnMetadata.isGenerated;
         });
     }
 

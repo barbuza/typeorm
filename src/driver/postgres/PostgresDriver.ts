@@ -1,19 +1,20 @@
-import {Driver} from "../Driver";
-import {ConnectionIsNotSetError} from "../error/ConnectionIsNotSetError";
-import {DriverOptions} from "../DriverOptions";
-import {ObjectLiteral} from "../../common/ObjectLiteral";
-import {DatabaseConnection} from "../DatabaseConnection";
-import {DriverPackageNotInstalledError} from "../error/DriverPackageNotInstalledError";
-import {DriverUtils} from "../DriverUtils";
-import {ColumnTypes} from "../../metadata/types/ColumnTypes";
-import {ColumnMetadata} from "../../metadata/ColumnMetadata";
-import {Logger} from "../../logger/Logger";
-import {PostgresQueryRunner} from "./PostgresQueryRunner";
-import {QueryRunner} from "../../query-runner/QueryRunner";
-import {DriverOptionNotSetError} from "../error/DriverOptionNotSetError";
-import {DataTransformationUtils} from "../../util/DataTransformationUtils";
-import {PlatformTools} from "../../platform/PlatformTools";
-import {NamingStrategyInterface} from "../../naming-strategy/NamingStrategyInterface";
+import { Driver } from "../Driver";
+import { ConnectionIsNotSetError } from "../error/ConnectionIsNotSetError";
+import { DriverOptions } from "../DriverOptions";
+import { ObjectLiteral } from "../../common/ObjectLiteral";
+import { DatabaseConnection } from "../DatabaseConnection";
+import { DriverPackageNotInstalledError } from "../error/DriverPackageNotInstalledError";
+import { DriverUtils } from "../DriverUtils";
+import { ColumnTypes } from "../../metadata/types/ColumnTypes";
+import { ColumnMetadata } from "../../metadata/ColumnMetadata";
+import { Logger } from "../../logger/Logger";
+import { PostgresQueryRunner } from "./PostgresQueryRunner";
+import { QueryRunner } from "../../query-runner/QueryRunner";
+import { DriverOptionNotSetError } from "../error/DriverOptionNotSetError";
+import { DataTransformationUtils } from "../../util/DataTransformationUtils";
+import { PlatformTools } from "../../platform/PlatformTools";
+import { NamingStrategyInterface } from "../../naming-strategy/NamingStrategyInterface";
+import { Point } from "./Point";
 
 // todo(tests):
 // check connection with url
@@ -51,7 +52,7 @@ export class PostgresDriver implements Driver {
     /**
      * Connection to postgres database.
      */
-    protected databaseConnection: DatabaseConnection|undefined;
+    protected databaseConnection: DatabaseConnection | undefined;
 
     /**
      * Postgres pool.
@@ -73,7 +74,7 @@ export class PostgresDriver implements Driver {
      * default: "public"
      */
     public schemaName?: string;
-    
+
 
     // -------------------------------------------------------------------------
     // Constructor
@@ -251,6 +252,14 @@ export class PostgresDriver implements Driver {
 
             case ColumnTypes.TIME:
                 return DataTransformationUtils.mixedTimeToString(value);
+
+            case ColumnTypes.POINT:
+                if (value) {
+                    const json = JSON.parse(value);
+                    return new Point(json.coordinates[0], json.coordinates[1]);
+                }
+                return null;
+
 
             case ColumnTypes.JSON:
             case ColumnTypes.JSONB:

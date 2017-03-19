@@ -69,12 +69,13 @@
     "ts-node": "^2.0.0",
     "tslint": "^4.3.1",
     "tslint-stylish": "^2.1.0-beta",
-    "typescript": "^2.1.1"
+    "typescript": "^2.2.1"
   },
   "dependencies": {
     "app-root-path": "^2.0.1",
     "glob": "^7.1.1",
     "reflect-metadata": "^0.1.9",
+    "tslib": "^1.6.0",
     "yargonaut": "^1.1.2",
     "yargs": "^6.6.0"
   },

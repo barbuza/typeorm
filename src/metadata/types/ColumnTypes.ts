@@ -1,8 +1,11 @@
 /**
  * All data types that column can be.
  */
-export type ColumnType = "string"|"text"|"number"|"integer"|"int"|"smallint"|"bigint"|"float"|"double"|
-                         "decimal"|"date"|"time"|"datetime"|"boolean"|"json"|"jsonb"|"simple_array"|"uuid";
+import { Point } from "../../driver/postgres/Point";
+
+export type ColumnType = "string" | "text" | "number" | "integer" | "int" | "smallint" | "bigint" | "float" | "double" |
+    "decimal" | "date" | "time" | "datetime" | "boolean" | "json" | "jsonb" | "simple_array" | "uuid" |
+    "point";
 
 /**
  * All data types that column can be.
@@ -100,11 +103,13 @@ export class ColumnTypes {
      */
     static UUID: ColumnType = "uuid";
 
+    static POINT: ColumnType = "point";
+
     /**
      * Checks if given type in a string format is supported by ORM.
      */
     static isTypeSupported(type: string) {
-        return this.supportedTypes.indexOf(<ColumnType> type) !== -1;
+        return this.supportedTypes.indexOf(<ColumnType>type) !== -1;
     }
 
     /**
@@ -129,7 +134,8 @@ export class ColumnTypes {
             this.JSON,
             this.JSONB,
             this.SIMPLE_ARRAY,
-            this.UUID
+            this.UUID,
+            this.POINT,
         ];
     }
 
@@ -139,7 +145,8 @@ export class ColumnTypes {
     static determineTypeFromFunction(type: Function): ColumnType {
         if (type instanceof Date) {
             return ColumnTypes.DATETIME;
-
+        } else if (type === Point) {
+            return ColumnTypes.POINT;
         } else if (type instanceof Function) {
             const typeName = (<any>type).name.toLowerCase();
             switch (typeName) {
@@ -171,13 +178,13 @@ export class ColumnTypes {
      * Checks if column type is numeric.
      */
     static isNumeric(type: ColumnType) {
-        return  type === ColumnTypes.NUMBER ||
-                type === ColumnTypes.INT ||
-                type === ColumnTypes.INTEGER ||
-                type === ColumnTypes.BIGINT ||
-                type === ColumnTypes.SMALLINT ||
-                type === ColumnTypes.DOUBLE ||
-                type === ColumnTypes.FLOAT;
+        return type === ColumnTypes.NUMBER ||
+            type === ColumnTypes.INT ||
+            type === ColumnTypes.INTEGER ||
+            type === ColumnTypes.BIGINT ||
+            type === ColumnTypes.SMALLINT ||
+            type === ColumnTypes.DOUBLE ||
+            type === ColumnTypes.FLOAT;
     }
 
 }
